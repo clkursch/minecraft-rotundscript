@@ -1,0 +1,3 @@
+-Rotundscript requires 2 mods to function! Figura and Pehkui
+-Other mods related to eating are optional, like "AlwaysEat" and "Saturation_Plus"
+-See the rotundscript.lua file to configure the settings 
