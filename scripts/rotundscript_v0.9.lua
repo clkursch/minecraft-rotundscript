@@ -406,7 +406,7 @@ function events.tick()
 	
 	
 	--IF WE'RE IMMOBILE MINING SPEED IS BROKE FOR SOME REASON. UNDO THAT.
-	if mm == 0 and player:isMoving() == false then
+	if moveMod == 0 and player:isMoving() == false then
 		pehkui.setScale("pehkui:mining_speed", 6)
 	else
 		pehkui.setScale("pehkui:mining_speed", 1)
@@ -455,8 +455,8 @@ end
 
 --CHECK IF A PHYSICAL BLOCK COLLISION EXISTS AT A SPECIFIC COORDINATE
 function checkColRaycast(x, y, z)
-	
-	local startPos = player:getPos()
+	local yCheck = player:getBoundingBox().y * 0.5 --PROBABLY A GOOD INDICATOR OF WHERE THEIR HIPS ARE
+	local startPos = player:getPos() + vec(0, yCheck, 0)
 	local endPos = startPos + vec(x, y, z)
     local hit, rayendpos, side = raycast:block(startPos, endPos)
 	
@@ -469,10 +469,9 @@ function updateNarrowSqueezed()
 	
 	--WAIT WHAT IF I MEASURED THE DISTANCE INSTEAD......
 	local distCheck = 2 + mainWidth --KIND OF ARBITRARY BUT LONG ENOUGH TO NOT BE AN ISSUE AND SHORT ENOUGH TO REDUCE COST
-	local yCheck = player:getEyeHeight() * 0.5 --PROBABLY A GOOD INDICATOR OF WHERE THEIR HIPS ARE
 	
-	local xPass = (checkColRaycast(distCheck, yCheck, 0).x - checkColRaycast(-distCheck, yCheck, 0).x) - mainWidth
-	local zPass = (checkColRaycast(0, yCheck, distCheck).z - checkColRaycast(0, yCheck, -distCheck).z) - mainWidth
+	local xPass = (checkColRaycast(distCheck, 0, 0).x - checkColRaycast(-distCheck, 0, 0).x) - mainWidth
+	local zPass = (checkColRaycast(0, 0, distCheck).z - checkColRaycast(0, 0, -distCheck).z) - mainWidth
 	local yPass = 2
 	
 	--BONUS CHECK IF WE'RE CRAWLING, CHECK FOR ROOM ABOVE US
