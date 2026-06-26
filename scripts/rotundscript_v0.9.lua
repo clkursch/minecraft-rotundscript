@@ -30,6 +30,7 @@ local crouchSqz = false
 local lastCrouchSqz = false
 local lastInWater = false
 local mainWidth = 0.6 --TRACK HITBOX WIDTH EXCLUDING CROUCHSEQUEEZE
+local mainHeight = 1.8
 local lastBoundingX = 0.6
 local lastY = 0
 
@@ -267,7 +268,7 @@ function events.tick()
 	isNarrowSqueezed = updateNarrowSqueezed() --OKAY WE SHOULD ONLY BE RUNNING THIS ONCE A TICK NOW IT'S SO EXPENSIVE
 	
 	--OK FR, THIS ONLY NEEDS TO BE RUN BY THE HOST
-	if host:isHost() then
+	if host:isHost() and not client.isPaused() then
 		--RESET OUR FOOD AND WEIGHT LEVELS ON DEATH
 		if player:isAlive() == false then
 			prevFood = 20
@@ -326,6 +327,7 @@ function events.tick()
 		-- KEEP TRACK OF OUR MODEL'S CANON WIDTH. THE SIZING PROCESS TWEENS SO WE HAVE TO CHECK THIS EVERY TICK :/
 		if crouchSqz == false and player:getBoundingBox().x == lastBoundingX then --DON'T RUN IF THE VALUE IS CHANGING. WAIT UNTIL THE TWEEN IS DONE
 			mainWidth = player:getBoundingBox().x
+			mainHeight = player:getBoundingBox().y
 		elseif crouchSqz == true then
 			lastBoundingX = mainWidth
 		else
@@ -416,12 +418,14 @@ function events.tick()
 	
 	--RECREATE OUR FOOTSTEPS BECAUSE WE DISABLED THE VANILLA ONES BECAUSE THEY BROKE. MODIFIED FROM THE WG_TEMPLATE
 	-- Use a timer to determine step sound times
-    if (player:isOnGround()) then
-        stepTime = stepTime + player:getVelocity():length()
-	elseif player:isClimbing() then --and player:getPos().y - lastY < 0.01  --THE SERVER DOESN'T CALCULATE OUR VELOCITY CORRECTLY ON LADDERS, SO WE HAVE TO CHECK Y VALUES INSTEAD
-		stepTime = stepTime + player:getVelocity():length() * 1.5
-		lastY = player:getPos().y 
-    end
+	if not client.isPaused() then
+		if (player:isOnGround()) then
+			stepTime = stepTime + player:getVelocity():length()
+		elseif player:isClimbing() then --and player:getPos().y - lastY < 0.01  --THE SERVER DOESN'T CALCULATE OUR VELOCITY CORRECTLY ON LADDERS, SO WE HAVE TO CHECK Y VALUES INSTEAD
+			stepTime = stepTime + player:getVelocity():length() * 1.5
+			lastY = player:getPos().y 
+		end
+	end
     if (stepTime >= 1.625) then
         stepTime = stepTime % 1.625
 		if (player:getVelocity():length() > 0.01) then --AN ATTEMPT TO GET CLIENTS TO STOP RUNNING FOOTSTEPS WHILE STILL --IDK IF IT WORKED...
@@ -476,7 +480,7 @@ function updateNarrowSqueezed()
 	
 	--BONUS CHECK IF WE'RE CRAWLING, CHECK FOR ROOM ABOVE US
 	if player:getPose() == "SWIMMING" then
-		distCheck = player:getBoundingBox().y + 2
+		distCheck = mainHeight + 2 --player:getBoundingBox().y + 2
 		yPass = checkColRaycast(0, distCheck, 0).y - checkColRaycast(0, -distCheck, 0).y - player:getBoundingBox().y
 	end
 	
@@ -488,23 +492,18 @@ end
 
 --DETECT IF THERE'S A BLOCK DIRECTLY ABOVE OUR HEAD.
 function canUncrouch()
-	local distCheck = 0.65 * myWidthMult
-	return world.getBlockState(player:getPos():add(distCheck, 1.1, distCheck)):isSolidBlock() == false
-		and world.getBlockState(player:getPos():add(-distCheck, 1.1, distCheck)):isSolidBlock() == false
-		and world.getBlockState(player:getPos():add(distCheck, 1.1, -distCheck)):isSolidBlock() == false
-		and world.getBlockState(player:getPos():add(-distCheck, 1.1, -distCheck)):isSolidBlock() == false
-		and squeezeVal > 0
+	return squeezeVal > 0
 end
 
 
 
 --FIRST CALL THE ONE THAT RUNS LOCALLY
 function setWeight()
-	pings.setWeight(weightStage(), isNarrowSqueezed, moveMod, jumpMod, crouchSqz, wet) --THEN RUN THE PING THAT RUNS ON THE SERVER
+	pings.setWeightPing(weightStage(), isNarrowSqueezed, moveMod, jumpMod, crouchSqz, wet) --THEN RUN THE PING THAT RUNS ON THE SERVER
 end
 
-function pings.setWeight(amount, squeezed, mm, jm, crSqz)
-    -- print("pings.setWeight " .. tostring(amount) .. " " .. tostring(squeezed) .. " " .. tostring(mm) .. " " .. tostring(jm) .. " " .. tostring(crSqz))
+function pings.setWeightPing(amount, squeezed, mm, jm, crSqz)
+    -- print("pings.setWeightPing " .. tostring(amount) .. " " .. tostring(squeezed) .. " " .. tostring(mm) .. " " .. tostring(jm) .. " " .. tostring(crSqz))
 	updateWeightStats(amount, squeezed, mm, jm, crSqz, player:isInWater())
 	isNarrowSqueezed = squeezed --UPDATE FOR OTHER CLIENTS (I don't think it worked)
 end
@@ -598,8 +597,7 @@ function updateWeightStats(stage, squeezed, mm, jm, crSqz, wet) --OKAY WE NEED T
 		--LIGHT SQUEEZES WON'T RUN THIS
 	end
 	
-	--THANKS TO A PEHKUI BUG, WE CAN'T EVER LET MOTION BE 0 OR WE COULD TRIGGER THE THOUSAND FOOTSTEPS BUG
-	pehkui.setScale("pehkui:motion", mySpeedMult * (((mm == 0) and 0.00) or mm))
+	pehkui.setScale("pehkui:motion", mySpeedMult * mm)
 	pehkui.setScale("pehkui:hitbox_width", myWidthMult)
 	
 	
@@ -705,13 +703,14 @@ function PlayFootstep()
 	local volmod = 1
 	
 	-- ((CONFIGURE)) -- OPTIONAL, MODIFY YOUR FOOTSTEPS AT CERTAIN WEIGHTSTAGES. 
-	if lastWeightStage >= 3 then
-		pitchmod = 0.7
-		volmod = 1.4
-	elseif lastWeightStage >= 5 then
+	if lastWeightStage >= 5 then
 		pitchmod = 0.5
 		volmod = 1.6
+	elseif lastWeightStage >= 3 then
+		pitchmod = 0.7
+		volmod = 1.4
 	end
+	
 	
 	if stored_step_sound then
 		sounds:playSound(
